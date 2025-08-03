@@ -1,35 +1,43 @@
-import React, { ReactNode } from 'react';
+import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import LoadingSpinner from './LoadingSpinner';
 
 interface ProtectedRouteProps {
-  children: ReactNode;
-  requiredRole?: 'admin' | 'subadmin' | 'user';
+  children: React.ReactNode;
+  allowedRoles?: string[];
+  requireAuth?: boolean;
 }
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ 
   children, 
-  requiredRole 
+  allowedRoles = [],
+  requireAuth = true 
 }) => {
-  const { user, loading } = useAuth();
+  const { user, isAuthenticated, loading } = useAuth();
   const location = useLocation();
 
   if (loading) {
-    return <LoadingSpinner message="Verifying access..." />;
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <LoadingSpinner size="lg" text="Loading..." />
+      </div>
+    );
   }
 
-  if (!user) {
-    // Redirect to login page with return url
+  if (requireAuth && !isAuthenticated) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (requiredRole && user.role !== requiredRole) {
-    // Redirect to appropriate dashboard based on user role
-    const dashboardPath = user.role === 'admin' ? '/admin' : 
-                         user.role === 'subadmin' ? '/subadmin' : 
-                         '/user';
-    return <Navigate to={dashboardPath} replace />;
+  if (allowedRoles.length > 0 && user && !allowedRoles.includes(user.role)) {
+    // Redirect based on user role
+    const roleRedirects = {
+      admin: '/admin',
+      subadmin: '/subadmin',
+      user: '/dashboard'
+    };
+    
+    return <Navigate to={roleRedirects[user.role as keyof typeof roleRedirects] || '/dashboard'} replace />;
   }
 
   return <>{children}</>;

@@ -27,22 +27,42 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // Static files for uploaded images
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Database connection
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/restaurant-management', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-  serverSelectionTimeoutMS: 15000, // 15 seconds timeout
-  socketTimeoutMS: 45000, // 45 seconds socket timeout
-})
-.then(() => {
-  console.log('✅ Connected to MongoDB');
-  // Create default admin user
-  require('./utils/createDefaultAdmin')();
-})
-.catch((error) => {
-  console.error('❌ MongoDB connection error:', error.message);
-  console.log('💡 Please check if MongoDB is running or update MONGODB_URI in .env file');
-});
+// Database connection with better error handling
+const connectDB = async () => {
+  try {
+    const mongoURI = 'mongodb+srv://abdul:abdul@cluster0.puutgw3.mongodb.net/restaurant-management';
+    console.log('🔗 Attempting to connect to MongoDB...');
+    
+    await mongoose.connect(mongoURI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 30000, // 30 seconds timeout
+      socketTimeoutMS: 45000, // 45 seconds socket timeout
+      maxPoolSize: 10,
+      retryWrites: true,
+      w: 'majority'
+    });
+    
+    console.log('✅ Connected to MongoDB successfully');
+    
+    // Create default admin user
+    require('./utils/createDefaultAdmin')();
+    
+  } catch (error) {
+    console.error('❌ MongoDB connection error:', error.message);
+    console.log('💡 Troubleshooting steps:');
+    console.log('   1. Check if MongoDB is running locally: mongod');
+    console.log('   2. Create a .env file in backend/ with MONGODB_URI');
+    console.log('   3. For MongoDB Atlas, use: mongodb+srv://username:password@cluster.mongodb.net/database');
+    console.log('   4. For local MongoDB, use: mongodb://localhost:27017/restaurant-management');
+    
+    // Don't exit the process, let it continue but log the error
+    process.exit(1);
+  }
+};
+
+// Connect to database
+connectDB();
 
 // Import routes
 const authRoutes = require('./routes/auth');
@@ -81,12 +101,22 @@ io.on('connection', (socket) => {
 // Cron job to check for expired bookings every minute
 cron.schedule('* * * * *', async () => {
   try {
+    // Check if MongoDB is connected before running the cron job
+    if (mongoose.connection.readyState !== 1) {
+      console.log('⚠️  MongoDB not connected, skipping expired bookings check');
+      return;
+    }
+
     const Booking = require('./models/Booking');
     const expiredBookings = await Booking.find({
       status: 'confirmed',
       arrivalDeadline: { $lt: new Date() },
       verified: false
     });
+
+    if (expiredBookings.length > 0) {
+      console.log(`🕐 Processing ${expiredBookings.length} expired bookings`);
+    }
 
     for (let booking of expiredBookings) {
       booking.status = 'cancelled';
@@ -101,7 +131,8 @@ cron.schedule('* * * * *', async () => {
       });
     }
   } catch (error) {
-    console.error('Error checking expired bookings:', error);
+    console.error('Error checking expired bookings:', error.message);
+    // Don't let the cron job crash the application
   }
 });
 

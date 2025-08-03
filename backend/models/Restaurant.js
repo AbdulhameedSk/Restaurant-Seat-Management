@@ -62,7 +62,7 @@ const restaurantSchema = new mongoose.Schema({
   }],
   priceRange: {
     type: String,
-    enum: ['budget', 'mid-range', 'fine-dining'],
+    enum: ['budget', 'moderate', 'expensive', 'luxury'],
     required: true
   },
   seats: [seatSchema],

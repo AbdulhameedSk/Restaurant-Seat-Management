@@ -148,6 +148,45 @@ router.get('/my-bookings', protect, async (req, res) => {
   }
 });
 
+// @desc    Get all bookings (Admin only)
+// @route   GET /api/booking/admin
+// @access  Private/Admin
+router.get('/admin', protect, authorize('admin'), async (req, res) => {
+  try {
+    const { page = 1, limit = 20, status, restaurant } = req.query;
+    
+    let query = {};
+    if (status) query.status = status;
+    if (restaurant) query.restaurant = restaurant;
+
+    const bookings = await Booking.find(query)
+      .populate('user', 'name email phone')
+      .populate('restaurant', 'name address')
+      .populate('verifiedBy', 'name')
+      .sort({ createdAt: -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit);
+
+    const total = await Booking.countDocuments(query);
+
+    res.json({
+      success: true,
+      count: bookings.length,
+      total,
+      page: parseInt(page),
+      pages: Math.ceil(total / limit),
+      bookings
+    });
+  } catch (error) {
+    console.error('Get admin bookings error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching bookings',
+      error: error.message
+    });
+  }
+});
+
 // @desc    Get booking by ID
 // @route   GET /api/booking/:id
 // @access  Private

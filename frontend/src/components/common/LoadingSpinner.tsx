@@ -2,34 +2,47 @@ import React from 'react';
 
 interface LoadingSpinnerProps {
   size?: 'sm' | 'md' | 'lg';
-  color?: 'primary' | 'white' | 'gray';
   text?: string;
 }
 
 const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({ 
   size = 'md', 
-  color = 'primary',
-  text 
+  text = 'Loading...' 
 }) => {
   const sizeClasses = {
-    sm: 'w-4 h-4',
-    md: 'w-8 h-8',
-    lg: 'w-12 h-12'
+    sm: 'w-6 h-6',
+    md: 'w-12 h-12',
+    lg: 'w-16 h-16'
   };
 
-  const colorClasses = {
-    primary: 'text-primary-600',
-    white: 'text-white',
-    gray: 'text-gray-600'
+  const textSizeClasses = {
+    sm: 'text-sm',
+    md: 'text-base',
+    lg: 'text-lg'
   };
 
   return (
-    <div className="flex flex-col items-center justify-center">
-      <div className={`animate-spin rounded-full border-2 border-t-transparent ${sizeClasses[size]} ${colorClasses[color]} border-current`}>
+    <div className="min-h-screen bg-secondary-50 flex items-center justify-center">
+      <div className="text-center">
+        {/* Loading Spinner */}
+        <div className="flex justify-center mb-4">
+          <div className={`loading-spinner ${sizeClasses[size]}`}></div>
+        </div>
+
+        {/* Loading Text */}
+        <div className="space-y-2">
+          <h2 className={`font-medium text-secondary-900 ${textSizeClasses[size]}`}>
+            {text}
+          </h2>
+          
+          {/* Loading Dots */}
+          <div className="flex justify-center space-x-1">
+            <div className="w-2 h-2 bg-primary-500 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
+            <div className="w-2 h-2 bg-primary-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+            <div className="w-2 h-2 bg-primary-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+          </div>
+        </div>
       </div>
-      {text && (
-        <p className="mt-2 text-sm text-gray-600">{text}</p>
-      )}
     </div>
   );
 };

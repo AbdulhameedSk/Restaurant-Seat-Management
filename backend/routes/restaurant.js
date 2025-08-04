@@ -4,6 +4,7 @@ const path = require('path');
 const Restaurant = require('../models/Restaurant');
 const User = require('../models/User');
 const { protect, authorize, checkPermission } = require('../middleware/auth');
+const Booking = require('../models/Booking'); // Added Booking model import
 
 const router = express.Router();
 
@@ -34,8 +35,8 @@ const upload = multer({
 
 // @desc    Create new restaurant
 // @route   POST /api/restaurant
-// @access  Private/Admin
-router.post('/', protect, authorize('admin'), upload.array('images', 5), async (req, res) => {
+// @access  Private/Admin or Restaurant Owner
+router.post('/', protect, authorize('admin', 'restaurant'), upload.array('images', 5), async (req, res) => {
   try {
     const {
       name, description, address, phone, email, cuisine, priceRange,
@@ -350,10 +351,11 @@ router.put('/:id/seats', protect, authorize('admin'), async (req, res) => {
   }
 });
 
-// @desc    Get restaurants managed by admin
-// @route   GET /api/restaurant/admin/managed
-// @access  Private/Admin
-router.get('/admin/managed', protect, authorize('admin'), async (req, res) => {
+// @desc    Get restaurants managed by restaurant owner
+// @route   GET /api/restaurant/owner/managed
+// @access  Private/Restaurant
+
+router.get('/owner/managed', protect, authorize('restaurant'), async (req, res) => {
   try {
     const restaurants = await Restaurant.find({ owner: req.user.id })
       .populate('subAdmins', 'name email isActive')
@@ -369,6 +371,304 @@ router.get('/admin/managed', protect, authorize('admin'), async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Error fetching managed restaurants',
+      error: error.message
+    });
+  }
+});
+
+// @desc    Get available seats for a restaurant on specific date/time
+// @route   GET /api/restaurant/:id/available-seats
+// @access  Public
+router.get('/:id/available-seats', async (req, res) => {
+  try {
+    const { date, time } = req.query;
+    
+    const restaurant = await Restaurant.findById(req.params.id);
+    if (!restaurant) {
+      return res.status(404).json({
+        success: false,
+        message: 'Restaurant not found'
+      });
+    }
+
+    // If no date/time provided, return all seats with their current availability
+    if (!date || !time) {
+      return res.json({
+        success: true,
+        seats: restaurant.seats
+      });
+    }
+
+    // Find bookings for the specific date and time
+    const bookingDate = new Date(date);
+    const existingBookings = await Booking.find({
+      restaurant: req.params.id,
+      bookingDate,
+      bookingTime: time,
+      status: { $in: ['confirmed', 'arrived'] }
+    });
+
+    // Mark seats as unavailable if they have bookings
+    const bookedSeatNumbers = existingBookings.map(booking => booking.seatNumber);
+    const availableSeats = restaurant.seats.map(seat => ({
+      ...seat.toObject(),
+      isAvailable: !bookedSeatNumbers.includes(seat.seatNumber)
+    }));
+
+    res.json({
+      success: true,
+      seats: availableSeats,
+      date,
+      time,
+      totalSeats: availableSeats.length,
+      availableCount: availableSeats.filter(seat => seat.isAvailable).length
+    });
+  } catch (error) {
+    console.error('Get available seats error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching available seats',
+      error: error.message
+    });
+  }
+});
+
+// @desc    Get seat availability with next available times
+// @route   GET /api/restaurant/:id/seat-availability
+// @access  Public
+router.get('/:id/seat-availability', async (req, res) => {
+  try {
+    const { date, time } = req.query;
+    
+    const restaurant = await Restaurant.findById(req.params.id);
+    if (!restaurant) {
+      return res.status(404).json({
+        success: false,
+        message: 'Restaurant not found'
+      });
+    }
+
+    const bookingDate = new Date(date);
+    const currentDate = new Date();
+    
+    // If date is in the past, return error
+    if (bookingDate < currentDate.setHours(0, 0, 0, 0)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cannot check availability for past dates'
+      });
+    }
+
+    // Get all bookings for the specific date
+    const dayBookings = await Booking.find({
+      restaurant: req.params.id,
+      bookingDate,
+      status: { $in: ['confirmed', 'arrived'] }
+    });
+
+    // Get bookings for the specific time slot
+    const timeSlotBookings = dayBookings.filter(booking => booking.bookingTime === time);
+    const bookedSeatNumbers = timeSlotBookings.map(booking => booking.seatNumber);
+
+    // Calculate seat availability
+    const seatAvailability = restaurant.seats.map(seat => {
+      const isAvailable = !bookedSeatNumbers.includes(seat.seatNumber);
+      return {
+        _id: seat._id,
+        seatNumber: seat.seatNumber,
+        seatType: seat.seatType,
+        position: seat.position,
+        isAvailable,
+        capacity: getSeatCapacity(seat.seatType)
+      };
+    });
+
+    // Generate next available time slots if current time is not available
+    const availableSeats = seatAvailability.filter(seat => seat.isAvailable);
+    let nextAvailableTimes = [];
+
+    if (availableSeats.length === 0) {
+      nextAvailableTimes = await findNextAvailableTimes(restaurant._id, bookingDate, time, restaurant.seats);
+    }
+
+    // Get operating hours for the day
+    const dayName = bookingDate.toLocaleDateString('en-US', { weekday: 'lowercase' });
+    const operatingHours = restaurant.operatingHours[dayName];
+
+    res.json({
+      success: true,
+      restaurant: {
+        _id: restaurant._id,
+        name: restaurant.name,
+        description: restaurant.description,
+        images: restaurant.images,
+        operatingHours: operatingHours
+      },
+      date,
+      time,
+      seatAvailability,
+      availableSeats,
+      totalSeats: restaurant.seats.length,
+      availableCount: availableSeats.length,
+      nextAvailableTimes: nextAvailableTimes.slice(0, 5), // Show next 5 available slots
+      timeSlots: generateTimeSlots(operatingHours)
+    });
+  } catch (error) {
+    console.error('Get seat availability error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching seat availability',
+      error: error.message
+    });
+  }
+});
+
+// Helper function to get seat capacity
+function getSeatCapacity(seatType) {
+  switch (seatType) {
+    case 'table-2': return 2;
+    case 'table-4': return 4;
+    case 'table-6': return 6;
+    case 'bar': return 1;
+    case 'counter': return 1;
+    default: return 2;
+  }
+}
+
+// Helper function to generate time slots
+function generateTimeSlots(operatingHours) {
+  if (!operatingHours || operatingHours.isClosed) {
+    return [];
+  }
+
+  const slots = [];
+  const openTime = operatingHours.open;
+  const closeTime = operatingHours.close;
+  
+  const [openHour, openMinute] = openTime.split(':').map(Number);
+  const [closeHour, closeMinute] = closeTime.split(':').map(Number);
+  
+  let currentHour = openHour;
+  let currentMinute = openMinute;
+  
+  while (currentHour < closeHour || (currentHour === closeHour && currentMinute < closeMinute)) {
+    const timeString = `${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}`;
+    slots.push(timeString);
+    
+    // Increment by 30 minutes
+    currentMinute += 30;
+    if (currentMinute >= 60) {
+      currentMinute = 0;
+      currentHour++;
+    }
+  }
+  
+  return slots;
+}
+
+// Helper function to find next available times
+async function findNextAvailableTimes(restaurantId, startDate, startTime, restaurantSeats) {
+  const nextTimes = [];
+  const maxDaysToCheck = 7; // Check next 7 days
+  
+  for (let dayOffset = 0; dayOffset < maxDaysToCheck; dayOffset++) {
+    const checkDate = new Date(startDate);
+    checkDate.setDate(checkDate.getDate() + dayOffset);
+    
+    // Get operating hours for this day
+    const dayName = checkDate.toLocaleDateString('en-US', { weekday: 'lowercase' });
+    const restaurant = await Restaurant.findById(restaurantId);
+    const operatingHours = restaurant.operatingHours[dayName];
+    
+    if (!operatingHours || operatingHours.isClosed) {
+      continue;
+    }
+    
+    const timeSlots = generateTimeSlots(operatingHours);
+    
+    // For the first day, start from the requested time
+    const startTimeIndex = dayOffset === 0 ? timeSlots.indexOf(startTime) + 1 : 0;
+    
+    for (let i = startTimeIndex; i < timeSlots.length; i++) {
+      const timeSlot = timeSlots[i];
+      
+      // Check if any seats are available at this time
+      const bookings = await Booking.find({
+        restaurant: restaurantId,
+        bookingDate: checkDate,
+        bookingTime: timeSlot,
+        status: { $in: ['confirmed', 'arrived'] }
+      });
+      
+      const bookedSeats = bookings.map(b => b.seatNumber);
+      const availableSeats = restaurantSeats.filter(seat => !bookedSeats.includes(seat.seatNumber));
+      
+      if (availableSeats.length > 0) {
+        nextTimes.push({
+          date: checkDate.toISOString().split('T')[0],
+          time: timeSlot,
+          availableSeats: availableSeats.length,
+          totalSeats: restaurantSeats.length
+        });
+        
+        if (nextTimes.length >= 10) { // Return max 10 suggestions
+          return nextTimes;
+        }
+      }
+    }
+  }
+  
+  return nextTimes;
+}
+
+// @desc    Get all restaurants (Admin only - system level)
+// @route   GET /api/restaurant/admin/all
+// @access  Private/Admin
+router.get('/admin/all', protect, authorize('admin'), async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 10,
+      search,
+      isActive
+    } = req.query;
+
+    // Build query
+    let query = {};
+
+    if (isActive !== undefined) {
+      query.isActive = isActive === 'true';
+    }
+
+    if (search) {
+      query.$or = [
+        { name: new RegExp(search, 'i') },
+        { 'address.city': new RegExp(search, 'i') }
+      ];
+    }
+
+    const restaurants = await Restaurant.find(query)
+      .populate('owner', 'name email')
+      .populate('subAdmins', 'name email')
+      .limit(limit * 1)
+      .skip((page - 1) * limit)
+      .sort({ createdAt: -1 });
+
+    const total = await Restaurant.countDocuments(query);
+
+    res.json({
+      success: true,
+      count: restaurants.length,
+      total,
+      page: parseInt(page),
+      pages: Math.ceil(total / limit),
+      restaurants
+    });
+  } catch (error) {
+    console.error('Get all restaurants (admin) error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching restaurants',
       error: error.message
     });
   }

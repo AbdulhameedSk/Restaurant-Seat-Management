@@ -14,6 +14,7 @@ import Register from './components/auth/Register';
 
 // Dashboard components
 import AdminDashboard from './components/dashboards/AdminDashboard';
+import RestaurantOwnerDashboard from './components/dashboards/RestaurantOwnerDashboard';
 import SubAdminDashboard from './components/dashboards/SubAdminDashboard';
 import UserDashboard from './components/dashboards/UserDashboard';
 
@@ -48,6 +49,14 @@ function App() {
                 element={
                   <ProtectedRoute allowedRoles={['admin']}>
                     <AdminDashboard />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/restaurant/*" 
+                element={
+                  <ProtectedRoute allowedRoles={['restaurant']}>
+                    <RestaurantOwnerDashboard />
                   </ProtectedRoute>
                 } 
               />

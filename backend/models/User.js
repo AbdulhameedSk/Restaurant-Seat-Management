@@ -23,7 +23,7 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['admin', 'subadmin', 'user'],
+    enum: ['admin', 'restaurant', 'subadmin', 'user'],
     default: 'user'
   },
   phone: {
@@ -90,7 +90,8 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
 // Get user role permissions
 userSchema.methods.getPermissions = function() {
   const permissions = {
-    admin: ['create_restaurant', 'manage_subadmins', 'view_all_bookings', 'system_settings'],
+    admin: ['manage_system', 'view_all_data', 'manage_users', 'system_settings'],
+    restaurant: ['create_restaurant', 'manage_own_restaurant', 'create_subadmins', 'manage_seats', 'view_own_bookings'],
     subadmin: ['verify_arrivals', 'manage_bookings', 'view_restaurant_data'],
     user: ['create_booking', 'view_own_bookings', 'cancel_booking']
   };

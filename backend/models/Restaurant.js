@@ -71,13 +71,13 @@ const restaurantSchema = new mongoose.Schema({
     default: 0
   },
   operatingHours: {
-    monday: { open: String, close: String, isClosed: { type: Boolean, default: false } },
-    tuesday: { open: String, close: String, isClosed: { type: Boolean, default: false } },
-    wednesday: { open: String, close: String, isClosed: { type: Boolean, default: false } },
-    thursday: { open: String, close: String, isClosed: { type: Boolean, default: false } },
-    friday: { open: String, close: String, isClosed: { type: Boolean, default: false } },
-    saturday: { open: String, close: String, isClosed: { type: Boolean, default: false } },
-    sunday: { open: String, close: String, isClosed: { type: Boolean, default: false } }
+    monday: { open: { type: String }, close: { type: String }, isClosed: { type: Boolean, default: false } },
+    tuesday: { open: { type: String }, close: { type: String }, isClosed: { type: Boolean, default: false } },
+    wednesday: { open: { type: String }, close: { type: String }, isClosed: { type: Boolean, default: false } },
+    thursday: { open: { type: String }, close: { type: String }, isClosed: { type: Boolean, default: false } },
+    friday: { open: { type: String }, close: { type: String }, isClosed: { type: Boolean, default: false } },
+    saturday: { open: { type: String }, close: { type: String }, isClosed: { type: Boolean, default: false } },
+    sunday: { open: { type: String }, close: { type: String }, isClosed: { type: Boolean, default: false } }
   },
   amenities: [{
     type: String,

@@ -33,6 +33,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     // Redirect based on user role
     const roleRedirects = {
       admin: '/admin',
+      restaurant: '/restaurant',
       subadmin: '/subadmin',
       user: '/dashboard'
     };

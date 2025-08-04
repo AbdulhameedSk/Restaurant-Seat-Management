@@ -161,6 +161,32 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  const registerRestaurantOwner = async (userData: RegisterData): Promise<void> => {
+    try {
+      dispatch({ type: 'SET_LOADING', payload: true });
+      
+      const response = await axios.post<ApiResponse>('/api/auth/register-restaurant-owner', userData);
+
+      if (response.data.success && response.data.token && response.data.user) {
+        dispatch({
+          type: 'LOGIN_SUCCESS',
+          payload: {
+            user: response.data.user,
+            token: response.data.token,
+          },
+        });
+        toast.success(response.data.message || 'Restaurant owner registration successful!');
+      } else {
+        throw new Error(response.data.message || 'Registration failed');
+      }
+    } catch (error: any) {
+      dispatch({ type: 'SET_LOADING', payload: false });
+      const message = error.response?.data?.message || error.message || 'Registration failed';
+      toast.error(message);
+      throw error;
+    }
+  };
+
   const logout = (): void => {
     dispatch({ type: 'LOGOUT' });
     toast.success('Logged out successfully');
@@ -171,6 +197,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     token: state.token,
     login,
     register,
+    registerRestaurantOwner,
     logout,
     loading: state.loading,
     isAuthenticated: state.isAuthenticated,

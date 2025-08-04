@@ -38,6 +38,9 @@ export const authAPI = {
   register: (userData: { name: string; email: string; password: string; phone: string }) =>
     axios.post<ApiResponse>('/api/auth/register', userData),
   
+  registerRestaurantOwner: (userData: { name: string; email: string; password: string; phone: string }) =>
+    axios.post<ApiResponse>('/api/auth/register-restaurant-owner', userData),
+  
   getProfile: () =>
     axios.get<ApiResponse<{ user: User }>>('/api/auth/me'),
   
@@ -65,27 +68,80 @@ export const restaurantAPI = {
   getById: (id: string) =>
     axios.get<ApiResponse<{ restaurant: Restaurant }>>(`/api/restaurant/${id}`),
   
-  create: (restaurantData: FormData) =>
-    axios.post<ApiResponse>('/api/restaurant', restaurantData, {
+  create: (formData: FormData) =>
+    axios.post<ApiResponse<{ restaurant: Restaurant }>>('/api/restaurant', formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     }),
   
-  update: (id: string, restaurantData: FormData) =>
-    axios.put<ApiResponse>(`/api/restaurant/${id}`, restaurantData, {
+  update: (id: string, formData: FormData) =>
+    axios.put<ApiResponse<{ restaurant: Restaurant }>>(`/api/restaurant/${id}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' }
     }),
   
   delete: (id: string) =>
     axios.delete<ApiResponse>(`/api/restaurant/${id}`),
   
-  updateSeats: (id: string, seats: any[]) =>
-    axios.put<ApiResponse>(`/api/restaurant/${id}/seats`, { seats }),
-  
+  getOwnerRestaurants: () =>
+    axios.get<ApiResponse<{ restaurants: Restaurant[] }>>('/api/restaurant/owner/managed'),
+    
   getAdminRestaurants: () =>
-    axios.get<ApiResponse<{ restaurants: Restaurant[] }>>('/api/restaurant/admin'),
+    axios.get<ApiResponse<{ restaurants: Restaurant[] }>>('/api/restaurant/admin/all'),
   
   toggleStatus: (id: string) =>
-    axios.patch<ApiResponse>(`/api/restaurant/${id}/toggle-status`)
+    axios.patch<ApiResponse>(`/api/restaurant/${id}/toggle-status`),
+  
+  // New seat availability endpoints
+  getSeatAvailability: (id: string, date: string, time: string) =>
+    axios.get<ApiResponse<{
+      restaurant: {
+        _id: string;
+        name: string;
+        description: string;
+        images: any[];
+        operatingHours: any;
+      };
+      date: string;
+      time: string;
+      seatAvailability: Array<{
+        _id: string;
+        seatNumber: string;
+        seatType: string;
+        position: { x: number; y: number };
+        isAvailable: boolean;
+        capacity: number;
+      }>;
+      availableSeats: any[];
+      totalSeats: number;
+      availableCount: number;
+      nextAvailableTimes: Array<{
+        date: string;
+        time: string;
+        availableSeats: number;
+        totalSeats: number;
+      }>;
+      timeSlots: string[];
+    }>>(`/api/restaurant/${id}/seat-availability?date=${date}&time=${time}`),
+  
+  getAvailableSeats: (id: string, date?: string, time?: string) => {
+    const params = new URLSearchParams();
+    if (date) params.append('date', date);
+    if (time) params.append('time', time);
+    const queryString = params.toString();
+    
+    return axios.get<ApiResponse<{
+      seats: Array<{
+        _id: string;
+        seatNumber: string;
+        seatType: string;
+        position: { x: number; y: number };
+        isAvailable: boolean;
+      }>;
+      date?: string;
+      time?: string;
+      totalSeats: number;
+      availableCount: number;
+    }>>(`/api/restaurant/${id}/available-seats${queryString ? '?' + queryString : ''}`);
+  }
 };
 
 // Booking API
@@ -106,6 +162,9 @@ export const bookingAPI = {
     axios.get<ApiResponse<{ bookings: Booking[] }>>('/api/booking/my-bookings'),
   
   getRestaurantBookings: () =>
+    axios.get<ApiResponse<{ bookings: Booking[] }>>('/api/booking/owner/restaurants'),
+  
+  getSubAdminBookings: () =>
     axios.get<ApiResponse<{ bookings: Booking[] }>>('/api/booking/restaurant'),
   
   getAdminBookings: () =>
@@ -127,7 +186,27 @@ export const bookingAPI = {
     axios.post<ApiResponse>(`/api/booking/${id}/complete`),
   
   updateStatus: (id: string, status: string, notes?: string) =>
-    axios.patch<ApiResponse>(`/api/booking/${id}/status`, { status, notes })
+    axios.patch<ApiResponse>(`/api/booking/${id}/status`, { status, notes }),
+  
+  // SubAdmin specific booking management
+  createWalkIn: (walkInData: {
+    customerName: string;
+    customerPhone: string;
+    seatNumber: string;
+    seatType: string;
+    partySize: number;
+    specialRequests?: string;
+  }) =>
+    axios.post<ApiResponse>('/api/booking/walk-in', walkInData),
+  
+  getSeatStatus: (date?: string, time?: string) => {
+    const params = new URLSearchParams();
+    if (date) params.append('date', date);
+    if (time) params.append('time', time);
+    const queryString = params.toString();
+    
+    return axios.get<ApiResponse<{ seatStatus: any[] }>>(`/api/booking/seat-status${queryString ? '?' + queryString : ''}`);
+  }
 };
 
 // User API

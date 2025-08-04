@@ -1,45 +1,36 @@
-import React, { useState, useEffect, Fragment, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { 
-  BarChart3, 
+  Building2, 
   Users, 
-  Building, 
-  Calendar,
+  Calendar, 
+  UserPlus,
   LogOut,
   Plus,
   Search,
-  Filter,
-  MoreVertical,
   Edit,
   Trash2,
   Eye,
   X,
   CheckCircle,
   Clock,
-  Building2,
-  UserCheck,
-  Settings
+  BarChart3,
+  Utensils
 } from 'lucide-react';
 import axios from 'axios';
 import { Restaurant, User, Booking } from '../../types';
 import LoadingSpinner from '../common/LoadingSpinner';
 import toast from 'react-hot-toast';
 
-const AdminDashboard: React.FC = () => {
+const RestaurantOwnerDashboard: React.FC = () => {
   const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('overview');
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
+  const [subAdmins, setSubAdmins] = useState<User[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [showAddModal, setShowAddModal] = useState(false);
   const [showAddSubAdminModal, setShowAddSubAdminModal] = useState(false);
-  const [userSearchTerm, setUserSearchTerm] = useState('');
-  const [userRoleFilter, setUserRoleFilter] = useState('all');
-  const [userStatusFilter, setUserStatusFilter] = useState('all');
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [showUserModal, setShowUserModal] = useState(false);
+  const [showAddRestaurantModal, setShowAddRestaurantModal] = useState(false);
   const [newSubAdmin, setNewSubAdmin] = useState({
     name: '',
     email: '',
@@ -47,9 +38,6 @@ const AdminDashboard: React.FC = () => {
     restaurant: ''
   });
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
-  const [currentSeatType, setCurrentSeatType] = useState('table-2');
-  const [currentSeatNumber, setCurrentSeatNumber] = useState('');
-  const seatLayoutRef = useRef<HTMLDivElement>(null);
   const [newRestaurant, setNewRestaurant] = useState({
     name: '',
     description: '',
@@ -60,7 +48,7 @@ const AdminDashboard: React.FC = () => {
       city: '',
       state: '',
       zipCode: '',
-      country: ''
+      country: 'India'
     },
     contactInfo: {
       phone: '',
@@ -68,6 +56,8 @@ const AdminDashboard: React.FC = () => {
     },
     seats: [] as any[]
   });
+  const [currentSeatType, setCurrentSeatType] = useState('table-2');
+  const [currentSeatNumber, setCurrentSeatNumber] = useState('');
 
   useEffect(() => {
     fetchDashboardData();
@@ -76,52 +66,79 @@ const AdminDashboard: React.FC = () => {
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const [restaurantsRes, usersRes, bookingsRes] = await Promise.all([
-        axios.get('/api/restaurant/admin/all'),
-        axios.get('/api/user'),
-        axios.get('/api/booking/admin')
+      
+      // Fetch all data in parallel for better performance
+      const [restaurantsRes, subAdminsRes, bookingsRes] = await Promise.all([
+        axios.get('/api/restaurant/owner/managed').catch(error => {
+          console.error('Error fetching restaurants:', error);
+          return { data: { success: false, restaurants: [] } };
+        }),
+        axios.get('/api/auth/subadmins').catch(error => {
+          console.error('Error fetching subadmins:', error);
+          return { data: { success: false, subAdmins: [] } };
+        }),
+        axios.get('/api/booking/owner/restaurants').catch(error => {
+          console.error('Error fetching bookings:', error);
+          return { data: { success: false, bookings: [] } };
+        })
       ]);
 
+      // Process restaurants
       if (restaurantsRes.data.success) {
         setRestaurants(restaurantsRes.data.restaurants || []);
+        console.log('Restaurants loaded:', restaurantsRes.data.restaurants?.length || 0);
       }
 
-      if (usersRes.data.success) {
-        setUsers(usersRes.data.users || []);
+      // Process subadmins
+      if (subAdminsRes.data.success) {
+        setSubAdmins(subAdminsRes.data.subAdmins || []);
+        console.log('SubAdmins loaded:', subAdminsRes.data.subAdmins?.length || 0);
       }
 
+      // Process bookings
       if (bookingsRes.data.success) {
         setBookings(bookingsRes.data.bookings || []);
+        console.log('Bookings loaded:', bookingsRes.data.bookings?.length || 0);
       }
+
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
-      toast.error('Failed to load dashboard data');
+      // Only show error if all requests fail
+      toast.error('Some data could not be loaded');
     } finally {
       setLoading(false);
     }
   };
 
-  // Calculate stats
-  const stats = {
-    totalRestaurants: restaurants.length,
-    totalUsers: users.length,
-    totalSubAdmins: users.filter(u => u.role === 'subadmin').length,
-    activeBookings: bookings.filter(b => ['confirmed', 'arrived'].includes(b.status)).length,
-    revenue: bookings.reduce((sum, b) => sum + (b.totalAmount || 500), 0)
+  const handleAddSubAdmin = async () => {
+    if (!newSubAdmin.name || !newSubAdmin.email || !newSubAdmin.password || !newSubAdmin.restaurant) {
+      toast.error('Please fill all required fields');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await axios.post('/api/auth/subadmin', newSubAdmin);
+      
+      if (response.data.success) {
+        toast.success(`SubAdmin "${newSubAdmin.name}" created successfully!`);
+        setShowAddSubAdminModal(false);
+        setNewSubAdmin({
+          name: '',
+          email: '',
+          password: '',
+          restaurant: ''
+        });
+        // Refresh dashboard data to show the new subadmin
+        fetchDashboardData();
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Failed to create SubAdmin');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Filter functions
-  const filteredUsers = users.filter(user => {
-    const matchesSearch = user.name.toLowerCase().includes(userSearchTerm.toLowerCase()) ||
-                         user.email.toLowerCase().includes(userSearchTerm.toLowerCase());
-    const matchesRole = userRoleFilter === 'all' || user.role === userRoleFilter;
-    const matchesStatus = userStatusFilter === 'all' || 
-                         (userStatusFilter === 'active' && user.isActive) ||
-                         (userStatusFilter === 'inactive' && !user.isActive);
-    return matchesSearch && matchesRole && matchesStatus;
-  });
-
-  // Handle functions
   const handleAddRestaurant = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -172,8 +189,8 @@ const AdminDashboard: React.FC = () => {
       });
 
       if (response.data.success) {
-        toast.success('Restaurant added successfully!');
-        setShowAddModal(false);
+        toast.success(`Restaurant "${newRestaurant.name}" created successfully!`);
+        setShowAddRestaurantModal(false);
         setNewRestaurant({
           name: '',
           description: '',
@@ -184,7 +201,7 @@ const AdminDashboard: React.FC = () => {
             city: '',
             state: '',
             zipCode: '',
-            country: ''
+            country: 'India'
           },
           contactInfo: {
             phone: '',
@@ -255,32 +272,13 @@ const AdminDashboard: React.FC = () => {
     }));
   };
 
-  const handleAddSubAdmin = async () => {
-    if (!newSubAdmin.name || !newSubAdmin.email || !newSubAdmin.password || !newSubAdmin.restaurant) {
-      toast.error('Please fill all required fields');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const response = await axios.post('/api/auth/subadmin', newSubAdmin);
-      
-      if (response.data.success) {
-        toast.success('SubAdmin created successfully!');
-        setShowAddSubAdminModal(false);
-        setNewSubAdmin({
-          name: '',
-          email: '',
-          password: '',
-          restaurant: ''
-        });
-        fetchDashboardData();
-      }
-    } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Failed to create SubAdmin');
-    } finally {
-      setLoading(false);
-    }
+  // Calculate stats
+  const stats = {
+    totalRestaurants: restaurants.length,
+    totalSubAdmins: subAdmins.length,
+    totalBookings: bookings.length,
+    activeBookings: bookings.filter(b => ['confirmed', 'arrived'].includes(b.status)).length,
+    revenue: bookings.reduce((sum, b) => sum + (b.totalAmount || 500), 0)
   };
 
   if (loading) return <LoadingSpinner />;
@@ -294,8 +292,8 @@ const AdminDashboard: React.FC = () => {
             <div className="flex items-center space-x-4">
               <Building2 className="h-8 w-8 text-primary-600" />
               <div>
-                <h1 className="text-xl font-bold text-secondary-900">Admin Dashboard</h1>
-                <p className="text-sm text-secondary-600">Manage your restaurant platform</p>
+                <h1 className="text-xl font-bold text-secondary-900">Restaurant Owner Dashboard</h1>
+                <p className="text-sm text-secondary-600">Manage your restaurant business</p>
               </div>
             </div>
             
@@ -322,8 +320,8 @@ const AdminDashboard: React.FC = () => {
           <nav className="flex space-x-8">
             {[
               { key: 'overview', label: 'Overview', icon: BarChart3 },
-              { key: 'restaurants', label: 'Restaurants', icon: Building },
-              { key: 'users', label: 'Users', icon: Users },
+              { key: 'restaurants', label: 'My Restaurants', icon: Building2 },
+              { key: 'subadmins', label: 'SubAdmins', icon: Users },
               { key: 'bookings', label: 'Bookings', icon: Calendar }
             ].map(({ key, label, icon: Icon }) => (
               <button
@@ -346,12 +344,12 @@ const AdminDashboard: React.FC = () => {
         {activeTab === 'overview' && (
           <div>
             {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
               <div className="card p-6">
                 <div className="flex items-center">
-                  <Building className="h-12 w-12 text-primary-600 mr-4" />
+                  <Building2 className="h-12 w-12 text-primary-600 mr-4" />
                   <div>
-                    <p className="text-sm font-medium text-secondary-600">Total Restaurants</p>
+                    <p className="text-sm font-medium text-secondary-600">My Restaurants</p>
                     <p className="text-3xl font-bold text-secondary-900">{stats.totalRestaurants}</p>
                   </div>
                 </div>
@@ -361,15 +359,25 @@ const AdminDashboard: React.FC = () => {
                 <div className="flex items-center">
                   <Users className="h-12 w-12 text-success-600 mr-4" />
                   <div>
-                    <p className="text-sm font-medium text-secondary-600">Total Users</p>
-                    <p className="text-3xl font-bold text-secondary-900">{stats.totalUsers}</p>
+                    <p className="text-sm font-medium text-secondary-600">SubAdmins</p>
+                    <p className="text-3xl font-bold text-secondary-900">{stats.totalSubAdmins}</p>
                   </div>
                 </div>
               </div>
 
               <div className="card p-6">
                 <div className="flex items-center">
-                  <Calendar className="h-12 w-12 text-warning-600 mr-4" />
+                  <Calendar className="h-12 w-12 text-info-600 mr-4" />
+                  <div>
+                    <p className="text-sm font-medium text-secondary-600">Total Bookings</p>
+                    <p className="text-3xl font-bold text-secondary-900">{stats.totalBookings}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="card p-6">
+                <div className="flex items-center">
+                  <CheckCircle className="h-12 w-12 text-warning-600 mr-4" />
                   <div>
                     <p className="text-sm font-medium text-secondary-600">Active Bookings</p>
                     <p className="text-3xl font-bold text-secondary-900">{stats.activeBookings}</p>
@@ -381,62 +389,46 @@ const AdminDashboard: React.FC = () => {
                 <div className="flex items-center">
                   <BarChart3 className="h-12 w-12 text-primary-600 mr-4" />
                   <div>
-                    <p className="text-sm font-medium text-secondary-600">Total Revenue</p>
+                    <p className="text-sm font-medium text-secondary-600">Revenue</p>
                     <p className="text-3xl font-bold text-secondary-900">₹{stats.revenue.toLocaleString()}</p>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* SubAdmin Management Section */}
+            {/* Quick Actions */}
             <div className="card p-8 mb-8">
               <div className="flex items-center justify-between mb-6">
-                <div className="flex items-center space-x-3">
-                  <UserCheck className="h-8 w-8 text-primary-600" />
-                  <h2 className="text-subheading">SubAdmin Management</h2>
-                </div>
+                <h2 className="text-subheading">Quick Actions</h2>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <button
+                  onClick={() => setShowAddRestaurantModal(true)}
+                  className="p-6 bg-primary-50 border border-primary-200 rounded-xl hover:bg-primary-100 transition-colors text-left"
+                >
+                  <Building2 className="h-8 w-8 text-primary-600 mb-3" />
+                  <h3 className="font-semibold text-secondary-900 mb-2">Create Restaurant</h3>
+                  <p className="text-sm text-secondary-600">Add a new restaurant with seats, images, and details</p>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('restaurants')}
+                  className="p-6 bg-info-50 border border-info-200 rounded-xl hover:bg-info-100 transition-colors text-left"
+                >
+                  <Eye className="h-8 w-8 text-info-600 mb-3" />
+                  <h3 className="font-semibold text-secondary-900 mb-2">Manage Restaurants</h3>
+                  <p className="text-sm text-secondary-600">View and manage your existing restaurant details and settings</p>
+                </button>
+                
                 <button
                   onClick={() => setShowAddSubAdminModal(true)}
-                  className="btn-primary"
+                  className="p-6 bg-success-50 border border-success-200 rounded-xl hover:bg-success-100 transition-colors text-left"
                 >
-                  <Plus className="h-5 w-5 mr-2" />
-                  Add SubAdmin
+                  <UserPlus className="h-8 w-8 text-success-600 mb-3" />
+                  <h3 className="font-semibold text-secondary-900 mb-2">Add SubAdmin</h3>
+                  <p className="text-sm text-secondary-600">Create new subadmin accounts to help manage your restaurants</p>
                 </button>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {users.filter(u => u.role === 'subadmin').map((subadmin) => (
-                  <div key={subadmin._id} className="bg-secondary-50 border border-secondary-200 rounded-xl p-6">
-                    <div className="flex items-center space-x-4 mb-4">
-                      <div className="w-12 h-12 bg-primary-500 rounded-full flex items-center justify-center">
-                        <UserCheck className="h-6 w-6 text-white" />
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-secondary-900">{subadmin.name}</h3>
-                        <p className="text-sm text-secondary-600">{subadmin.email}</p>
-                      </div>
-                    </div>
-                    <div className="text-sm text-secondary-700">
-                      <p><strong>Restaurant:</strong> {subadmin.restaurant?.name || 'Not assigned'}</p>
-                      <p><strong>Status:</strong> 
-                        <span className={`ml-2 badge-${subadmin.isActive ? 'success' : 'error'}`}>
-                          {subadmin.isActive ? 'Active' : 'Inactive'}
-                        </span>
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              
-              <div className="mt-6 p-4 bg-primary-50 border border-primary-200 rounded-xl">
-                <h4 className="font-semibold text-primary-800 mb-2">SubAdmin Capabilities:</h4>
-                <ul className="text-sm text-primary-700 space-y-1">
-                  <li>• Verify customer arrivals and mark as arrived</li>
-                  <li>• Create walk-in bookings for immediate seating</li>
-                  <li>• Mark bookings as completed when customers leave</li>
-                  <li>• Handle no-show situations and free up seats</li>
-                  <li>• Real-time seat availability management</li>
-                </ul>
               </div>
             </div>
           </div>
@@ -445,12 +437,9 @@ const AdminDashboard: React.FC = () => {
         {activeTab === 'restaurants' && (
           <div>
             <div className="flex items-center justify-between mb-8">
-              <div className="flex items-center space-x-3">
-                <Building className="h-8 w-8 text-primary-600" />
-                <h2 className="text-heading">Restaurant Management</h2>
-              </div>
+              <h2 className="text-heading">My Restaurants</h2>
               <button
-                onClick={() => setShowAddModal(true)}
+                onClick={() => setShowAddRestaurantModal(true)}
                 className="btn-primary"
               >
                 <Plus className="h-5 w-5 mr-2" />
@@ -458,31 +447,8 @@ const AdminDashboard: React.FC = () => {
               </button>
             </div>
 
-            {/* Search and Filter */}
-            <div className="card p-6 mb-6">
-              <div className="flex items-center space-x-4">
-                <div className="flex-1">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-secondary-400 h-5 w-5" />
-                    <input
-                      type="text"
-                      placeholder="Search restaurants..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="input pl-10"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Restaurants Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {restaurants
-                .filter(restaurant => 
-                  restaurant.name.toLowerCase().includes(searchTerm.toLowerCase())
-                )
-                .map((restaurant) => (
+              {restaurants.map((restaurant) => (
                 <div key={restaurant._id} className="card group">
                   {restaurant.images && restaurant.images.length > 0 ? (
                     <img
@@ -492,7 +458,7 @@ const AdminDashboard: React.FC = () => {
                     />
                   ) : (
                     <div className="w-full h-48 bg-secondary-100 flex items-center justify-center">
-                      <Building className="h-16 w-16 text-secondary-400" />
+                      <Building2 className="h-16 w-16 text-secondary-400" />
                     </div>
                   )}
                   
@@ -516,13 +482,28 @@ const AdminDashboard: React.FC = () => {
                 </div>
               ))}
             </div>
+
+            {restaurants.length === 0 && (
+              <div className="text-center py-16 card">
+                <Building2 className="h-16 w-16 text-secondary-400 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-secondary-700 mb-2">No restaurants yet</h3>
+                <p className="text-secondary-500 mb-4">Create your first restaurant to start managing bookings</p>
+                <button
+                  onClick={() => setShowAddRestaurantModal(true)}
+                  className="btn-primary"
+                >
+                  <Plus className="h-5 w-5 mr-2" />
+                  Create Your First Restaurant
+                </button>
+              </div>
+            )}
           </div>
         )}
 
-        {activeTab === 'users' && (
+        {activeTab === 'subadmins' && (
           <div>
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-heading">Users Management</h2>
+              <h2 className="text-heading">SubAdmin Management</h2>
               <button
                 onClick={() => setShowAddSubAdminModal(true)}
                 className="btn-primary"
@@ -532,126 +513,35 @@ const AdminDashboard: React.FC = () => {
               </button>
             </div>
             
-            {/* Search and Filter */}
-            <div className="card p-6 mb-6">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between space-y-4 sm:space-y-0">
-                <div className="flex items-center space-x-4">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-secondary-400 h-5 w-5" />
-                    <input
-                      type="text"
-                      placeholder="Search users..."
-                      value={userSearchTerm}
-                      onChange={(e) => setUserSearchTerm(e.target.value)}
-                      className="input pl-10"
-                    />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {subAdmins.map((subadmin) => (
+                <div key={subadmin._id} className="card p-6">
+                  <div className="flex items-center space-x-4 mb-4">
+                    <div className="w-12 h-12 bg-primary-500 rounded-full flex items-center justify-center">
+                      <Users className="h-6 w-6 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-secondary-900">{subadmin.name}</h3>
+                      <p className="text-sm text-secondary-600">{subadmin.email}</p>
+                    </div>
                   </div>
-                  <select
-                    value={userRoleFilter}
-                    onChange={(e) => setUserRoleFilter(e.target.value)}
-                    className="input"
-                  >
-                    <option value="all">All Roles</option>
-                    <option value="user">Customers</option>
-                    <option value="restaurant">Restaurant Owners</option>
-                    <option value="subadmin">SubAdmins</option>
-                    <option value="admin">Admins</option>
-                  </select>
-                  <select
-                    value={userStatusFilter}
-                    onChange={(e) => setUserStatusFilter(e.target.value)}
-                    className="input"
-                  >
-                    <option value="all">All Status</option>
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
-                  </select>
+                  <div className="text-sm text-secondary-700">
+                    <p><strong>Restaurant:</strong> {subadmin.restaurant?.name || 'Not assigned'}</p>
+                    <p><strong>Status:</strong> 
+                      <span className={`ml-2 badge-${subadmin.isActive ? 'success' : 'error'}`}>
+                        {subadmin.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                    </p>
+                  </div>
                 </div>
-                <div className="text-sm text-secondary-600">
-                  {filteredUsers.length} of {users.length} users
-                </div>
-              </div>
+              ))}
             </div>
 
-            {/* Users Table */}
-            <div className="card overflow-hidden">
-              <div className="px-6 py-4 border-b border-secondary-200">
-                <h3 className="text-subheading">All Users</h3>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="table">
-                  <thead className="table-header">
-                    <tr>
-                      <th className="table-header-cell">User</th>
-                      <th className="table-header-cell">Role</th>
-                      <th className="table-header-cell">Restaurant</th>
-                      <th className="table-header-cell">Status</th>
-                      <th className="table-header-cell">Last Login</th>
-                      <th className="table-header-cell">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-secondary-200">
-                    {filteredUsers.map((user) => (
-                      <tr key={user._id} className="table-row">
-                        <td className="table-cell">
-                          <div>
-                            <div className="text-sm font-medium text-secondary-900">{user.name}</div>
-                            <div className="text-sm text-secondary-500">{user.email}</div>
-                            {user.phone && <div className="text-sm text-secondary-500">{user.phone}</div>}
-                          </div>
-                        </td>
-                        <td className="table-cell">
-                          <span className={`badge-${
-                            user.role === 'admin' ? 'info' :
-                            user.role === 'restaurant' ? 'primary' :
-                            user.role === 'subadmin' ? 'warning' :
-                            'secondary'
-                          }`}>
-                            {user.role === 'restaurant' ? 'Restaurant Owner' : user.role}
-                          </span>
-                        </td>
-                        <td className="table-cell">
-                          {user.restaurant?.name || 'N/A'}
-                        </td>
-                        <td className="table-cell">
-                          <span className={`badge-${user.isActive ? 'success' : 'error'}`}>
-                            {user.isActive ? 'Active' : 'Inactive'}
-                          </span>
-                        </td>
-                        <td className="table-cell">
-                          {user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'Never'}
-                        </td>
-                        <td className="table-cell">
-                          <div className="flex items-center space-x-2">
-                            <button className="text-primary-600 hover:text-primary-900">
-                              <Eye className="h-4 w-4" />
-                            </button>
-                            <button className="text-warning-600 hover:text-warning-900">
-                              <Edit className="h-4 w-4" />
-                            </button>
-                            {user.role !== 'admin' && (
-                              <button className="text-error-600 hover:text-error-900">
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {filteredUsers.length === 0 && (
-              <div className="text-center py-12 card">
-                <Users className="h-12 w-12 text-secondary-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-secondary-900 mb-2">No users found</h3>
-                <p className="text-secondary-600">
-                  {userSearchTerm || userRoleFilter !== 'all' || userStatusFilter !== 'all'
-                    ? 'Try adjusting your search or filter criteria.'
-                    : 'No users available in the system.'}
-                </p>
+            {subAdmins.length === 0 && (
+              <div className="text-center py-16 card">
+                <Users className="h-16 w-16 text-secondary-400 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-secondary-700 mb-2">No subadmins yet</h3>
+                <p className="text-secondary-500">Create subadmin accounts to help manage your restaurants</p>
               </div>
             )}
           </div>
@@ -660,59 +550,12 @@ const AdminDashboard: React.FC = () => {
         {activeTab === 'bookings' && (
           <div>
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-heading">Bookings Management</h2>
+              <h2 className="text-heading">All Bookings</h2>
             </div>
 
-            {/* Bookings Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
-              <div className="card p-6">
-                <div className="flex items-center">
-                  <Calendar className="h-8 w-8 text-primary-600 mr-3" />
-                  <div>
-                    <h3 className="text-lg font-medium text-secondary-900">Total Bookings</h3>
-                    <p className="text-2xl font-bold text-secondary-900">{bookings.length}</p>
-                  </div>
-                </div>
-              </div>
-              <div className="card p-6">
-                <div className="flex items-center">
-                  <CheckCircle className="h-8 w-8 text-success-600 mr-3" />
-                  <div>
-                    <h3 className="text-lg font-medium text-secondary-900">Completed</h3>
-                    <p className="text-2xl font-bold text-secondary-900">
-                      {bookings.filter(b => b.status === 'completed').length}
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <div className="card p-6">
-                <div className="flex items-center">
-                  <Clock className="h-8 w-8 text-warning-600 mr-3" />
-                  <div>
-                    <h3 className="text-lg font-medium text-secondary-900">Active</h3>
-                    <p className="text-2xl font-bold text-secondary-900">
-                      {bookings.filter(b => ['confirmed', 'arrived'].includes(b.status)).length}
-                    </p>
-                  </div>
-                </div>
-              </div>
-              <div className="card p-6">
-                <div className="flex items-center">
-                  <BarChart3 className="h-8 w-8 text-primary-600 mr-3" />
-                  <div>
-                    <h3 className="text-lg font-medium text-secondary-900">Revenue</h3>
-                    <p className="text-2xl font-bold text-secondary-900">
-                      ₹{bookings.reduce((sum, b) => sum + (b.totalAmount || 500), 0).toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Bookings Table */}
             <div className="card overflow-hidden">
               <div className="px-6 py-4 border-b border-secondary-200">
-                <h3 className="text-subheading">All Bookings</h3>
+                <h3 className="text-subheading">Recent Bookings</h3>
               </div>
               <div className="overflow-x-auto">
                 <table className="table">
@@ -724,11 +567,10 @@ const AdminDashboard: React.FC = () => {
                       <th className="table-header-cell">Date & Time</th>
                       <th className="table-header-cell">Seat</th>
                       <th className="table-header-cell">Status</th>
-                      <th className="table-header-cell">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-secondary-200">
-                    {bookings.map((booking) => (
+                    {bookings.slice(0, 20).map((booking) => (
                       <tr key={booking._id} className="table-row">
                         <td className="table-cell">
                           <div className="text-sm font-medium text-secondary-900">{booking.bookingId || booking._id.slice(-6)}</div>
@@ -740,7 +582,9 @@ const AdminDashboard: React.FC = () => {
                           </div>
                         </td>
                         <td className="table-cell">
-                          <div className="text-sm text-secondary-900">{booking.restaurant?.name || 'N/A'}</div>
+                          <div className="text-sm text-secondary-900">
+                            {typeof booking.restaurant === 'object' ? booking.restaurant.name : 'N/A'}
+                          </div>
                         </td>
                         <td className="table-cell">
                           <div>
@@ -765,13 +609,6 @@ const AdminDashboard: React.FC = () => {
                           }`}>
                             {booking.status}
                           </span>
-                        </td>
-                        <td className="table-cell">
-                          <div className="flex items-center space-x-2">
-                            <button className="text-primary-600 hover:text-primary-900">
-                              <Eye className="h-4 w-4" />
-                            </button>
-                          </div>
                         </td>
                       </tr>
                     ))}
@@ -809,23 +646,11 @@ const AdminDashboard: React.FC = () => {
                   </button>
                 </div>
                 
-                <div className="mb-4 p-4 bg-primary-50 rounded-lg">
-                  <h4 className="text-sm font-medium text-primary-900 mb-2">SubAdmin Capabilities:</h4>
-                  <ul className="text-xs text-primary-800 space-y-1">
-                    <li>• Verify customer arrivals (15-minute window)</li>
-                    <li>• Mark customers as no-show if they don't arrive</li>
-                    <li>• View restaurant bookings and statistics</li>
-                    <li>• Mark completed bookings when customers leave</li>
-                    <li>• Real-time notifications for their restaurant</li>
-                  </ul>
-                </div>
-                
                 <div className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-secondary-700 mb-1">Name *</label>
                     <input
                       type="text"
-                      name="name"
                       value={newSubAdmin.name}
                       onChange={(e) => setNewSubAdmin(prev => ({ ...prev, name: e.target.value }))}
                       className="input"
@@ -837,7 +662,6 @@ const AdminDashboard: React.FC = () => {
                     <label className="block text-sm font-medium text-secondary-700 mb-1">Email *</label>
                     <input
                       type="email"
-                      name="email"
                       value={newSubAdmin.email}
                       onChange={(e) => setNewSubAdmin(prev => ({ ...prev, email: e.target.value }))}
                       className="input"
@@ -849,7 +673,6 @@ const AdminDashboard: React.FC = () => {
                     <label className="block text-sm font-medium text-secondary-700 mb-1">Password *</label>
                     <input
                       type="password"
-                      name="password"
                       value={newSubAdmin.password}
                       onChange={(e) => setNewSubAdmin(prev => ({ ...prev, password: e.target.value }))}
                       className="input"
@@ -860,7 +683,6 @@ const AdminDashboard: React.FC = () => {
                   <div>
                     <label className="block text-sm font-medium text-secondary-700 mb-1">Restaurant *</label>
                     <select
-                      name="restaurant"
                       value={newSubAdmin.restaurant}
                       onChange={(e) => setNewSubAdmin(prev => ({ ...prev, restaurant: e.target.value }))}
                       className="input"
@@ -872,6 +694,11 @@ const AdminDashboard: React.FC = () => {
                         </option>
                       ))}
                     </select>
+                    {restaurants.length === 0 && (
+                      <p className="text-xs text-secondary-500 mt-1">
+                        Create a restaurant first to assign subadmins
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -898,17 +725,17 @@ const AdminDashboard: React.FC = () => {
       )}
 
       {/* Add Restaurant Modal */}
-      {showAddModal && (
+      {showAddRestaurantModal && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
           <div className="flex items-center justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            <div className="fixed inset-0 bg-secondary-500 bg-opacity-75 transition-opacity" onClick={() => setShowAddModal(false)}></div>
+            <div className="fixed inset-0 bg-secondary-500 bg-opacity-75 transition-opacity" onClick={() => setShowAddRestaurantModal(false)}></div>
             
             <div className="inline-block align-bottom modal text-left shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-4xl sm:w-full">
               <div className="bg-white px-8 pt-8 pb-6">
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-subheading">Add New Restaurant</h3>
+                  <h3 className="text-subheading">Create New Restaurant</h3>
                   <button
-                    onClick={() => setShowAddModal(false)}
+                    onClick={() => setShowAddRestaurantModal(false)}
                     className="text-secondary-400 hover:text-secondary-600 transition-colors"
                   >
                     <X className="h-6 w-6" />
@@ -1197,7 +1024,7 @@ const AdminDashboard: React.FC = () => {
                   <div className="flex items-center justify-end space-x-4 pt-6 border-t border-secondary-200">
                     <button
                       type="button"
-                      onClick={() => setShowAddModal(false)}
+                      onClick={() => setShowAddRestaurantModal(false)}
                       className="btn-secondary"
                     >
                       Cancel
@@ -1221,4 +1048,4 @@ const AdminDashboard: React.FC = () => {
   );
 };
 
-export default AdminDashboard; 
+export default RestaurantOwnerDashboard; 

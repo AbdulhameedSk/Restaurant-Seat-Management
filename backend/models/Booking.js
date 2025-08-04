@@ -71,6 +71,13 @@ const bookingSchema = new mongoose.Schema({
     required: true,
     match: [/^\d{10}$/, 'Please enter a valid 10-digit phone number']
   },
+  customerName: {
+    type: String,
+    // Only required for walk-in bookings where user might not have an account
+    required: function() {
+      return this.isWalkIn && !this.user;
+    }
+  },
   totalAmount: {
     type: Number,
     default: 0

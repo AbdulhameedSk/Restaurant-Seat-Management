@@ -1,129 +1,148 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
-import { User, Mail, Lock, Phone, Eye, EyeOff, UserPlus } from 'lucide-react';
-import LoadingSpinner from '../common/LoadingSpinner';
+import { Mail, Lock, User, Phone, LogIn, Building2, Users, Store } from 'lucide-react';
+import toast from 'react-hot-toast';
+
+type UserType = 'user' | 'restaurant';
 
 const Register: React.FC = () => {
+  const [userType, setUserType] = useState<UserType>('user');
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     password: '',
     confirmPassword: '',
-    phone: '',
+    phone: ''
   });
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [errors, setErrors] = useState<{[key: string]: string}>({});
-  
-  const { register } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const { register, registerRestaurantOwner, user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    
-    // Clear error when user starts typing
-    if (errors[name]) {
-      setErrors(prev => ({
-        ...prev,
-        [name]: ''
-      }));
+  // Redirect based on user role after successful registration
+  useEffect(() => {
+    if (isAuthenticated && user) {
+      const roleRedirects = {
+        admin: '/admin',
+        restaurant: '/restaurant',
+        subadmin: '/subadmin',
+        user: '/dashboard'
+      };
+      
+      const redirectPath = roleRedirects[user.role as keyof typeof roleRedirects] || '/dashboard';
+      navigate(redirectPath);
     }
-  };
+  }, [isAuthenticated, user, navigate]);
 
-  const validateForm = () => {
-    const newErrors: {[key: string]: string} = {};
-
-    if (!formData.name.trim()) {
-      newErrors.name = 'Name is required';
-    }
-
-    if (!formData.email.trim()) {
-      newErrors.email = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Email is invalid';
-    }
-
-    if (!formData.password) {
-      newErrors.password = 'Password is required';
-    } else if (formData.password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
-    }
-
-    if (!formData.confirmPassword) {
-      newErrors.confirmPassword = 'Please confirm your password';
-    } else if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
-    }
-
-    if (!formData.phone.trim()) {
-      newErrors.phone = 'Phone number is required';
-    } else if (!/^\d{10}$/.test(formData.phone)) {
-      newErrors.phone = 'Phone number must be 10 digits';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value
+    });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!validateForm()) {
+    if (formData.password !== formData.confirmPassword) {
+      toast.error('Passwords do not match');
       return;
     }
 
+    setLoading(true);
+
     try {
-      setIsLoading(true);
-      await register({
+      const userData = {
         name: formData.name,
         email: formData.email,
         password: formData.password,
-        phone: formData.phone,
-      });
-      navigate('/dashboard', { replace: true });
-    } catch (error) {
-      // Error is handled in the auth context
+        phone: formData.phone
+      };
+
+      if (userType === 'restaurant') {
+        await registerRestaurantOwner(userData);
+        toast.success('Restaurant owner registration successful! Welcome aboard!');
+      } else {
+        await register(userData);
+        toast.success('Registration successful! Welcome aboard!');
+      }
+      
+      // Navigation handled by useEffect after user state updates
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || 'Registration failed. Please try again.');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-50 to-secondary-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gradient-to-br from-primary-50 to-secondary-50 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
+        {/* Header */}
         <div className="text-center">
-          <div className="mx-auto h-12 w-12 flex items-center justify-center rounded-full bg-primary-600">
-            <UserPlus className="h-6 w-6 text-white" />
+          <div className="flex justify-center mb-6">
+            <div className="w-16 h-16 bg-primary-600 rounded-full flex items-center justify-center">
+              <Building2 className="h-8 w-8 text-white" />
+            </div>
           </div>
-          <h2 className="mt-6 text-3xl font-extrabold text-gray-900">
-            Create your account
-          </h2>
-          <p className="mt-2 text-sm text-gray-600">
-            Or{' '}
-            <Link
-              to="/login"
-              className="font-medium text-primary-600 hover:text-primary-500 transition-colors"
-            >
-              sign in to your existing account
-            </Link>
-          </p>
+          <h1 className="text-3xl font-bold text-secondary-900 mb-2">Create Account</h1>
+          <p className="text-secondary-600 text-lg">Join our restaurant platform</p>
         </div>
 
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-          <div className="bg-white p-8 rounded-xl shadow-lg space-y-6">
+        {/* User Type Selection */}
+        <div className="card-elevated p-6 mb-6">
+          <h2 className="text-lg font-semibold text-secondary-900 mb-4 text-center">
+            What type of account do you need?
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <button
+              type="button"
+              onClick={() => setUserType('user')}
+              className={`p-4 rounded-lg border-2 transition-all duration-200 ${
+                userType === 'user'
+                  ? 'border-primary-500 bg-primary-50 text-primary-700'
+                  : 'border-secondary-200 bg-white text-secondary-600 hover:border-secondary-300'
+              }`}
+            >
+              <div className="flex flex-col items-center space-y-2">
+                <Users className="h-8 w-8" />
+                <h3 className="font-medium">Customer Account</h3>
+                <p className="text-sm text-center">Book tables and make reservations</p>
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setUserType('restaurant')}
+              className={`p-4 rounded-lg border-2 transition-all duration-200 ${
+                userType === 'restaurant'
+                  ? 'border-primary-500 bg-primary-50 text-primary-700'
+                  : 'border-secondary-200 bg-white text-secondary-600 hover:border-secondary-300'
+              }`}
+            >
+              <div className="flex flex-col items-center space-y-2">
+                <Store className="h-8 w-8" />
+                <h3 className="font-medium">Restaurant Owner</h3>
+                <p className="text-sm text-center">Manage your restaurant and bookings</p>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        {/* Register Form */}
+        <div className="card-elevated p-8">
+          <div className="mb-6 text-center">
+            <p className="text-secondary-600">
+              Creating {userType === 'restaurant' ? 'restaurant owner' : 'customer'} account
+            </p>
+          </div>
+          <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="name" className="block text-sm font-medium text-secondary-700 mb-2">
                 Full Name
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <User className="h-5 w-5 text-gray-400" />
+                  <User className="h-5 w-5 text-secondary-400" />
                 </div>
                 <input
                   id="name"
@@ -132,23 +151,20 @@ const Register: React.FC = () => {
                   autoComplete="name"
                   required
                   value={formData.name}
-                  onChange={handleInputChange}
-                  className={`block w-full pl-10 pr-3 py-3 border rounded-lg placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors ${
-                    errors.name ? 'border-red-300' : 'border-gray-300'
-                  }`}
+                  onChange={handleChange}
+                  className="input pl-10"
                   placeholder="Enter your full name"
                 />
               </div>
-              {errors.name && <p className="mt-1 text-sm text-red-600">{errors.name}</p>}
             </div>
 
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
-                Email address
+              <label htmlFor="email" className="block text-sm font-medium text-secondary-700 mb-2">
+                Email Address
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Mail className="h-5 w-5 text-gray-400" />
+                  <Mail className="h-5 w-5 text-secondary-400" />
                 </div>
                 <input
                   id="email"
@@ -157,131 +173,134 @@ const Register: React.FC = () => {
                   autoComplete="email"
                   required
                   value={formData.email}
-                  onChange={handleInputChange}
-                  className={`block w-full pl-10 pr-3 py-3 border rounded-lg placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors ${
-                    errors.email ? 'border-red-300' : 'border-gray-300'
-                  }`}
-                  placeholder="Enter your email"
+                  onChange={handleChange}
+                  className="input pl-10"
+                  placeholder="Enter your email address"
                 />
               </div>
-              {errors.email && <p className="mt-1 text-sm text-red-600">{errors.email}</p>}
             </div>
 
             <div>
-              <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-2">
-                Phone Number
+              <label htmlFor="phone" className="block text-sm font-medium text-secondary-700 mb-2">
+                Phone Number {userType === 'restaurant' && <span className="text-red-500">*</span>}
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Phone className="h-5 w-5 text-gray-400" />
+                  <Phone className="h-5 w-5 text-secondary-400" />
                 </div>
                 <input
                   id="phone"
                   name="phone"
                   type="tel"
                   autoComplete="tel"
-                  required
+                  required={userType === 'restaurant'}
                   value={formData.phone}
-                  onChange={handleInputChange}
-                  className={`block w-full pl-10 pr-3 py-3 border rounded-lg placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors ${
-                    errors.phone ? 'border-red-300' : 'border-gray-300'
-                  }`}
-                  placeholder="Enter your phone number"
+                  onChange={handleChange}
+                  className="input pl-10"
+                  placeholder={userType === 'restaurant' ? 'Enter your business phone number' : 'Enter your phone number (optional)'}
                 />
               </div>
-              {errors.phone && <p className="mt-1 text-sm text-red-600">{errors.phone}</p>}
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="password" className="block text-sm font-medium text-secondary-700 mb-2">
                 Password
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-gray-400" />
+                  <Lock className="h-5 w-5 text-secondary-400" />
                 </div>
                 <input
                   id="password"
                   name="password"
-                  type={showPassword ? 'text' : 'password'}
+                  type="password"
                   autoComplete="new-password"
                   required
                   value={formData.password}
-                  onChange={handleInputChange}
-                  className={`block w-full pl-10 pr-10 py-3 border rounded-lg placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors ${
-                    errors.password ? 'border-red-300' : 'border-gray-300'
-                  }`}
+                  onChange={handleChange}
+                  className="input pl-10"
                   placeholder="Enter your password"
                 />
-                <button
-                  type="button"
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                  onClick={() => setShowPassword(!showPassword)}
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600" />
-                  ) : (
-                    <Eye className="h-5 w-5 text-gray-400 hover:text-gray-600" />
-                  )}
-                </button>
               </div>
-              {errors.password && <p className="mt-1 text-sm text-red-600">{errors.password}</p>}
             </div>
 
             <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-secondary-700 mb-2">
                 Confirm Password
               </label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-gray-400" />
+                  <Lock className="h-5 w-5 text-secondary-400" />
                 </div>
                 <input
                   id="confirmPassword"
                   name="confirmPassword"
-                  type={showConfirmPassword ? 'text' : 'password'}
+                  type="password"
                   autoComplete="new-password"
                   required
                   value={formData.confirmPassword}
-                  onChange={handleInputChange}
-                  className={`block w-full pl-10 pr-10 py-3 border rounded-lg placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors ${
-                    errors.confirmPassword ? 'border-red-300' : 'border-gray-300'
-                  }`}
+                  onChange={handleChange}
+                  className="input pl-10"
                   placeholder="Confirm your password"
                 />
-                <button
-                  type="button"
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                >
-                  {showConfirmPassword ? (
-                    <EyeOff className="h-5 w-5 text-gray-400 hover:text-gray-600" />
-                  ) : (
-                    <Eye className="h-5 w-5 text-gray-400 hover:text-gray-600" />
-                  )}
-                </button>
               </div>
-              {errors.confirmPassword && <p className="mt-1 text-sm text-red-600">{errors.confirmPassword}</p>}
             </div>
 
             <div>
               <button
                 type="submit"
-                disabled={isLoading}
-                className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                disabled={loading}
+                className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
               >
-                {isLoading ? (
-                  <LoadingSpinner size="sm" color="white" />
+                {loading ? (
+                  <>
+                    <div className="loading-spinner w-5 h-5"></div>
+                    <span>Creating account...</span>
+                  </>
                 ) : (
                   <>
-                    <UserPlus className="-ml-1 mr-2 h-5 w-5" />
-                    Create Account
+                    <LogIn className="h-5 w-5" />
+                    <span>
+                      Create {userType === 'restaurant' ? 'Restaurant Owner' : 'Customer'} Account
+                    </span>
                   </>
                 )}
               </button>
             </div>
+          </form>
+
+          {/* Divider */}
+          <div className="mt-8">
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-secondary-300"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-4 bg-white text-secondary-500">Already have an account?</span>
+              </div>
+            </div>
           </div>
-        </form>
+
+          {/* Login Link */}
+          <div className="mt-6 text-center">
+            <p className="text-secondary-600">
+              Ready to sign in?{' '}
+              <Link
+                to="/login"
+                className="font-medium text-primary-600 hover:text-primary-500 transition-colors"
+              >
+                Sign in here
+              </Link>
+            </p>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="text-center">
+          <p className="text-secondary-500 text-sm">
+            By creating an account, you agree to our terms of service
+          </p>
+        </div>
       </div>
     </div>
   );

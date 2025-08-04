@@ -2,7 +2,7 @@ export interface User {
   _id: string;
   name: string;
   email: string;
-  role: 'admin' | 'subadmin' | 'user';
+  role: 'admin' | 'restaurant' | 'subadmin' | 'user';
   phone?: string;
   restaurant?: {
     _id: string;
@@ -34,7 +34,7 @@ export interface Restaurant {
     caption: string;
   }[];
   cuisine: string[];
-  priceRange: 'budget' | 'mid-range' | 'fine-dining';
+  priceRange: 'budget' | 'moderate' | 'expensive' | 'luxury';
   seats: Seat[];
   totalSeats: number;
   operatingHours: {
@@ -111,6 +111,7 @@ export interface AuthContextType {
   token: string | null;
   login: (email: string, password: string) => Promise<void>;
   register: (userData: RegisterData) => Promise<void>;
+  registerRestaurantOwner: (userData: RegisterData) => Promise<void>;
   logout: () => void;
   loading: boolean;
   isAuthenticated: boolean;

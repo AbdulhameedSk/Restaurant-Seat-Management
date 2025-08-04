@@ -45,8 +45,9 @@ const connectDB = async () => {
     
     console.log('✅ Connected to MongoDB successfully');
     
-    // Create default admin user
-    require('./utils/createDefaultAdmin')();
+    // Create default admin user and demo data
+require('./utils/createDefaultAdmin')();
+require('./utils/createDemoData')();
     
   } catch (error) {
     console.error('❌ MongoDB connection error:', error.message);
